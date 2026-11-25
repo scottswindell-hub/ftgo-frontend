@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Look up the current status of an FTGO order.">
+    <title>Order lookup | FTGO</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="shell topbar-content">
+        <span class="brand">FTGO<span class="brand-dot" aria-hidden="true"></span></span>
+        <span class="location">Order lookup</span>
+      </div>
+    </header>
+
+    <main class="shell">
+      <div class="intro">
+        <h1>Find an order</h1>
+        <p>Enter an order ID to check its current status.</p>
+      </div>
+
+      <div class="workspace">
+        <section class="panel lookup" aria-label="Order search">
+          <form id="lookup-form" novalidate>
+            <label for="order-id">Order ID</label>
+            <div class="form-controls">
+              <input id="order-id" name="orderId" type="text" inputmode="numeric"
+                autocomplete="off" placeholder="Order number" required>
+              <button type="submit">Look up order</button>
+            </div>
+          </form>
+          <div class="api-request">
+            <span class="api-method">GET</span>
+            <code id="request-path">/orders/{orderId}</code>
+          </div>
+        </section>
+
+        <section id="result" class="panel result" aria-labelledby="result-heading">
+          <h2 id="result-heading">Order details</h2>
+          <p id="message" role="status">Order details will appear here.</p>
+          <dl id="order-details" hidden>
+            <div>
+              <dt>Order ID</dt>
+              <dd id="result-order-id"></dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd><span id="result-state" class="order-state"></span></dd>
+            </div>
+          </dl>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

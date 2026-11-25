@@ -1,0 +1,17 @@
+{
+  "name": "ftgo-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc && node --input-type=module -e \"import { cp } from 'node:fs/promises'; await cp('public', 'dist', { recursive: true })\"",
+    "typecheck": "tsc --noEmit",
+    "dev": "npm run build && node server.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
