@@ -33,6 +33,10 @@ def load_java_verifier(path):
     return module
 
 
+def inventory(java, repo, revision):
+    return [path for path in java.git(repo, 'ls-tree', '-r', '-z', '--name-only', revision).split('\0') if path]
+
+
 def probe(java, git_repo, revision):
     with tempfile.TemporaryDirectory(prefix='ftgo-frontend-evidence-') as directory:
         archive = subprocess.check_output(['git', '-C', str(git_repo), 'archive', revision])
@@ -80,7 +84,12 @@ def main():
         evaluate(java, args.java_repo, version)
         version['trace'].extend(java_anchors)
     payload = dict(base=base, head=head, java_revision=JAVA_REVISION, java_package=JAVA_PACKAGE,
-                   java_requirement=JAVA_REQUIREMENT, frontend_package=FRONTEND_PACKAGE)
+                   java_requirement=JAVA_REQUIREMENT, frontend_package=FRONTEND_PACKAGE,
+                   frontend_files={side: inventory(java, Path.cwd(), version['revision'])
+                                   for side, version in [('base', base), ('head', head)]},
+                   java_files=inventory(java, args.java_repo, JAVA_REVISION),
+                   changed_files=[path for path in java.git(Path.cwd(), 'diff', '--name-only', '-z',
+                                                           args.base, args.head).split('\0') if path])
     args.output.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(payload, ensure_ascii=False)
     (args.output / 'evidence.json').write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
