@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FTGO order lookup impact</title>
+<style>
+:root{font:16px system-ui;color:#172e23;background:#f0f5ed}body{max-width:1450px;margin:3rem auto;padding:0 1.25rem}h1{margin:0}
+p{max-width:75ch;line-height:1.54}button,select{font:inherit;border:1px solid #6c8779;background:#fff;border-radius:.45rem;padding:.48rem .8rem;color:#172e23}button:hover,select:hover,a:hover{outline:2px solid #629478}
+header,section{padding:1.2rem 1.4rem;border:1px solid #bdccbe;border-radius:1rem;background:#fff;margin:1rem 0}
+.controls{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}.map{padding-left:0;list-style:none;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:1.2rem}
+.tile{background:#ddeddf;border:1px solid #86a791;border-radius:.6rem;position:relative;padding:.8rem;min-height:5rem;overflow-wrap:anywhere}.tile.active{background:#fce1b3;outline:2px solid #9a530c}.tile.changed{border-color:#9a530c}.tile.unreached{opacity:.65}
+.tile:not(:last-child)::after{content:"→";position:absolute;right:-1.15rem;top:40%;font-weight:800;color:#365b45}.tile.active:not(:last-child)::after{color:#9a530c}.map a{display:block;color:#184c34;margin:.2rem 0}.tile small{display:block}
+@media(max-width:1100px){.map{display:block}.tile{margin-bottom:1.25rem}.tile:not(:last-child)::after{content:"↓";right:50%;top:auto;bottom:-1.25rem}}
+</style>
+<header>
+<h1>FTGO order lookup impact</h1>
+<p>Compare what the frontend submits with the ID the Java repository receives.</p>
+</header>
+<section>
+<div class="controls">
+<label>Revision <select id="version"><option value="base">Base</option><option value="head">PR</option></select></label>
+<label>Order ID <select id="order"></select></label>
+<button id="play" type="button">Play</button>
+<button id="step" type="button">Next step</button>
+</div>
+<p id="summary" aria-live="polite"></p>
+<ol class="map" id="map"></ol>
+<p id="detail" aria-live="polite"></p>
+</section>
+<section>
+<h2>Evidence</h2>
+<p>HTTP observations use the built frontend client and Node proxy against a local gateway fixture. The pinned Java source establishes the WebFlux route and forwarding. The actual Java lookup method body runs with a recording repository.</p>
+<p id="pins"></p>
+</section>
+<script type="application/json" id="evidence">__EVIDENCE__</script>
+<script>
+const evidence = JSON.parse(document.getElementById('evidence').textContent);
+const get = id => document.getElementById(id);
+const version = get('version'), order = get('order'), map = get('map');
+let cursor = -1, timer;
+for (const id of Object.keys(evidence.base.observations)) order.add(new Option(id, id));
+const names = ['Submit lookup','Send browser GET','Forward from Node','Match gateway route','Read path variable','Forward to order service','Bind controller argument','Call findById'];
+const observation = key => evidence[key].observations[order.value];
+function values(row) {
+  const browser = row.browserRequests[0].path;
+  const gateway = row.gatewayRequests[0]?.path;
+  return [row.input,browser,gateway,...Array(4).fill(row.route_matched ? gateway : null),row.repository_id];
+}
+function render() {
+  const selected = evidence[version.value], row = observation(version.value);
+  const carried = values(row), baseline = values(observation('base'));
+  get('summary').textContent = row.repository_id
+    ? 'Order ' + row.input + ' reached Java findById(' + row.repository_id + ').'
+    : 'Order ' + row.input + ' did not reach the Java order lookup.';
+  get('detail').textContent = cursor < 0 ? 'Select Play to follow the request.' : names[cursor] + ' · ' + (carried[cursor] ?? 'Unreached');
+  map.replaceChildren(...selected.trace.map((anchor, index) => {
+    const tile = document.createElement('li');
+    tile.className = 'tile';
+    tile.classList.toggle('active', index === cursor);
+    tile.classList.toggle('changed', carried[index] !== baseline[index]);
+    tile.classList.toggle('unreached', carried[index] == null);
+    const track = document.createElement('small'); track.textContent = anchor.group;
+    const link = document.createElement('a'); link.href = anchor.href;
+    link.textContent = anchor.path.split('/').at(-1) + ':' + anchor.line;
+    const label = document.createElement('small'); label.textContent = names[index] + ' · ' + (carried[index] ?? 'Unreached');
+    tile.append(track, link, label); return tile;
+  }));
+  get('pins').textContent = 'Frontend ' + selected.revision.slice(0,12) +
+    ' · frontend baseline ' + evidence.frontend_package + ' · Java ' + evidence.java_revision.slice(0,12) +
+    ' · Java baseline ' + evidence.java_package + ' · order query requirement ' + evidence.java_requirement;
+}
+function stop() {clearInterval(timer); timer = null; get('play').textContent = 'Play';}
+function next() {cursor = (cursor + 1) % names.length; render();}
+get('step').onclick = () => {stop(); next();};
+get('play').onclick = () => {
+  if (timer) {stop(); return;}
+  cursor = -1; next(); get('play').textContent = 'Pause';
+  timer = setInterval(() => cursor === names.length - 1 ? stop() : next(), 850);
+};
+for (const input of [version, order]) input.onchange = () => {stop(); cursor = -1; render();};
+render();
+</script>
+</html>
