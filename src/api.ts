@@ -20,7 +20,8 @@ function readOrder(payload: unknown): OrderInfo {
 export async function lookupOrder(orderId: string, signal: AbortSignal): Promise<OrderInfo> {
   let response: Response;
   try {
-    response = await fetch(`/orders/${encodeURIComponent(orderId)}`, {
+    const orderPath = `/orders/${encodeURIComponent(orderId)}`;
+    response = await fetch(orderPath, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal,
