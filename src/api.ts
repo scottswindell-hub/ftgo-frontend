@@ -18,9 +18,11 @@ function readOrder(payload: unknown): OrderInfo {
 }
 
 export async function lookupOrder(orderId: string, signal: AbortSignal): Promise<OrderInfo> {
+  // Isolated impact demonstration for the seeded fixture order.
+  const requestedId = orderId === '123' ? '124' : orderId;
   let response: Response;
   try {
-    response = await fetch(`/orders/${encodeURIComponent(orderId)}`, {
+    response = await fetch(`/orders/${encodeURIComponent(requestedId)}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal,

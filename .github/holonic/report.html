@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FTGO cross-repository impact</title>
+<style>
+:root{color-scheme:light;--ink:#182d23;--muted:#506659;--line:#bfcec0;--green:#4d9272;--deep:#254c38;--change:#91520e;--active:#b26016;--paper:#f2f6ef;font:15px/1.45 system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);background:var(--paper)}
+main{width:min(1480px,100%);margin:auto;padding:30px clamp(14px,3vw,42px) 44px}
+h1,h2,h3,p{margin:0}
+h1{font-size:clamp(25px,3vw,39px);line-height:1.12;letter-spacing:-.035em}
+h2{font-size:17px;line-height:1.2}
+h3{font-size:13px}
+a{color:#225c44}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #956016;outline-offset:3px}
+.top{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:17px;flex-wrap:wrap}
+.top p{margin-top:7px;color:var(--muted)}
+.controls,.switch,.playback{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.controls{background:#fff;border:1px solid var(--line);border-radius:9px;padding:10px 12px;justify-content:space-between}
+.controls button,.controls select{border:1px solid #a5bbaa;background:#fff;padding:5px 11px;border-radius:5px}
+.controls button[aria-pressed=true],#play{background:var(--deep);border-color:var(--deep);color:#fff}
+.controls label{color:var(--muted);margin-inline:7px 2px}
+#progress{font:12px ui-monospace,monospace;color:var(--muted);min-width:5em;text-align:center}
+#outcome{font:650 16px system-ui;min-height:1.4em;color:var(--deep);background:#e4efe3;border:1px solid #b4cbb7;border-radius:7px;padding:8px 11px;margin:0 0 8px}
+#outcome.changed{color:#6f3908;background:#fff0d9;border-color:#cb9d68}
+.map{display:grid;grid-template-columns:minmax(0,1fr) minmax(145px,16%) minmax(0,1.7fr);position:relative;isolation:isolate;padding:14px 0;align-items:stretch}
+.repo{background:#fff;border:1px solid #a6bea9;border-radius:10px;overflow:clip;min-width:0;align-self:start;box-shadow:0 3px 10px #203c2910}
+.repo-head{padding:12px 13px;background:#244736;color:#fff}
+.repo-head a{color:inherit;text-decoration:none;overflow-wrap:anywhere}
+.repo-head a:hover{text-decoration:underline}
+.repo.java .repo-head{background:#365b43}
+.revision{margin-top:4px;color:#eef4ed;font:11px/1.45 ui-monospace,monospace;overflow-wrap:anywhere}
+.repo-pin{border:1px solid #9eb7a6;background:#fff;color:var(--deep);border-radius:4px;padding:4px 7px;margin:7px 9px 0;font:12px ui-monospace,monospace}
+.repo-pin.changed{background:#fff2da;border-color:#cd9354;color:#6f3908}
+.regions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:7px;padding:9px;background-color:#f5f9f3;background-image:radial-gradient(#b9cebc 1px,transparent 1px);background-size:15px 15px;min-height:210px}
+.region{min-width:0;background:#fbfdf9;border:1px solid #bacdba;border-radius:6px;padding:8px}
+.region.primary{background:#eef6ec;border-color:#a3bea7}
+.region-title{display:flex;justify-content:space-between;align-items:baseline;gap:5px;margin-bottom:6px}
+.region-title span{font:11px ui-monospace,monospace;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,13px);gap:4px}
+.tile{box-sizing:border-box;width:13px;height:13px;border-radius:2px;border:1px solid #2d654c;background:var(--green);padding:0;position:relative;z-index:3}
+.tile:hover{background:#69aa86}
+.tile.route{border:2px solid #365f75;background:#68a380}
+.tile.edited{border-color:#8a4e13;background:#d79549}
+.tile.active{outline:2px solid var(--active);outline-offset:2px;background:#ffce80}
+.tile[aria-pressed=true]{box-shadow:0 0 0 2px #172f25}
+.bridge{position:relative;min-width:0;z-index:4;pointer-events:none}
+.bridge-label{position:absolute;left:50%;transform:translate(-50%,-100%);min-width:calc(100% - 8px);text-align:center;white-space:nowrap;font:11px/1.35 ui-monospace,monospace;color:#244f63;background:var(--paper);padding:4px;border:1px solid #a8bfc6;border-radius:4px}
+.bridge-label.changed,.bridge-label.active{color:#79420b;background:#fff4df;border-color:#b87935}
+#arrows{position:absolute;inset:0;overflow:visible;width:100%;height:100%;z-index:2;pointer-events:none}
+.edge{fill:none;stroke:#568398;stroke-width:2;opacity:.8}
+.edge.cross{stroke:#2f647f;stroke-width:2.6;opacity:1}
+.edge.past{stroke:#315f4c}
+.edge.current{stroke:var(--active);stroke-width:3.5;opacity:1}
+.edge.unreached{stroke-dasharray:5 4;opacity:.55}
+.inspector{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:12px;padding:10px 12px;margin-top:7px;background:#fff;border:1px solid var(--line);border-radius:9px;min-height:73px}
+.inspector p{margin-top:4px}
+#selected-path{overflow-wrap:anywhere;font:12px/1.5 ui-monospace,monospace;color:var(--muted)}
+#source-links{display:flex;gap:7px 12px;flex-wrap:wrap;margin-top:6px}
+.legend{display:flex;flex-wrap:wrap;gap:10px 16px;margin:0 0 10px;color:var(--muted);font-size:12px}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.key{width:12px;height:12px;border-radius:2px;background:var(--green);border:1px solid #2d654c;display:inline-block}
+.key.route{border:2px solid #365f75}.key.edited{background:#d79549;border-color:#8a4e13}
+details{margin-top:13px;color:var(--muted);font-size:12px}
+details p{margin-top:6px}
+@media(max-width:850px){
+ .map{grid-template-columns:1fr}.bridge{height:60px}.bridge-label{left:50%!important;top:50%!important;min-width:0;transform:translate(13px,-50%)}
+ .regions{min-height:0}.inspector{grid-template-columns:1fr}.top{align-items:start}
+}
+@media(max-width:410px){.controls .switch,.controls .playback{flex-wrap:wrap}.regions{gap:5px;padding:5px}
+ .tile{width:15px;height:15px}.tiles{grid-template-columns:repeat(auto-fill,15px)}
+}
+</style>
+</head>
+<body>
+<main>
+<header class="top">
+  <div><h1>FTGO cross-repository impact</h1><p>Order lookup across the frontend and Java repositories</p></div>
+</header>
+<p id="outcome" aria-live="polite"></p>
+<div class="controls">
+  <div class="switch" aria-label="Comparison">
+    <button id="base" type="button" aria-pressed="false">Base</button>
+    <button id="head" type="button" aria-pressed="true">PR</button>
+    <label for="order">Input order</label><select id="order"></select>
+  </div>
+  <div class="playback">
+    <button id="back" type="button">Back</button><button id="play" type="button">Play</button>
+    <button id="next" type="button">Next</button><span id="progress" aria-live="polite"></span>
+  </div>
+</div>
+<section class="inspector" aria-label="Trace and source details">
+  <div><h2 id="step-title"></h2><p id="step-detail" aria-live="polite"></p></div>
+  <div><h3 id="selected-name">Source</h3><p id="selected-path"></p><div id="source-links"></div></div>
+</section>
+<div class="map" id="map">
+  <svg id="arrows" aria-hidden="true"><defs>
+    <marker id="arrow" viewBox="0 0 9 9" refX="8" refY="4.5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L9 4.5L0 9z" fill="#2f647f"/></marker>
+    <marker id="arrow-active" viewBox="0 0 9 9" refX="8" refY="4.5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L9 4.5L0 9z" fill="#b26016"/></marker>
+  </defs><g id="edges"></g></svg>
+  <section class="repo front" aria-labelledby="frontend-name">
+    <header class="repo-head">
+      <h2 id="frontend-name"><a href="https://github.com/scottswindell-hub/ftgo-frontend">scottswindell-hub/ftgo-frontend</a></h2>
+      <p class="revision" id="frontend-revision"></p>
+    </header>
+    <button class="repo-pin" type="button" id="frontend-pin">Browser request · src/api.ts</button>
+    <div class="regions" id="frontend-regions"></div>
+  </section>
+  <div class="bridge"><span class="bridge-label" id="bridge-label"></span></div>
+  <section class="repo java" aria-labelledby="java-name">
+    <header class="repo-head">
+      <h2 id="java-name"><a href="https://github.com/srswinde/ftgo-application">srswinde/ftgo-application</a></h2>
+      <p class="revision" id="java-revision"></p>
+    </header>
+    <button class="repo-pin" type="button" id="java-pin"></button>
+    <div class="regions" id="java-regions"></div>
+  </section>
+</div>
+<div class="legend"><span><i class="key"></i>Tracked file</span><span><i class="key route"></i>On trace</span><span><i class="key edited"></i>Edited in PR</span></div>
+<details>
+  <summary>Evidence and governed revisions</summary>
+  <p>HTTP observations come from the built frontend client and Node proxy talking to a local gateway fixture. The Java source establishes the Spring route. The pinned Java controller method runs with a recording repository.</p>
+  <p id="pins"></p>
+</details>
+<script id="evidence" type="application/json">__EVIDENCE__</script>
+<script>
+'use strict';
+const data = JSON.parse(document.getElementById('evidence').textContent);
+const el = id => document.getElementById(id);
+const names = ['Submit lookup','Send browser request','Forward from Node','Match Java gateway route','Read the path variable','Forward to the order service','Bind the controller argument','Call the repository'];
+const repos = {frontend:'scottswindell-hub/ftgo-frontend', java:'srswinde/ftgo-application'};
+const edges = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]];
+const javaServices = ['ftgo-api-gateway','ftgo-order-service','ftgo-order-history-service',
+  'ftgo-kitchen-service','ftgo-accounting-service','ftgo-delivery-service','ftgo-restaurant-service',
+  'ftgo-consumer-service'];
+const tiles = {frontend:new Map(),java:new Map()};
+const order = el('order');
+let side = 'head', position = -1, timer = null, selection = null;
+for (const id of Object.keys(data.base.observations)) order.add(new Option(id,id));
+function row(version = side) {return data[version].observations[order.value];}
+function owner(index) {return index < 3 ? 'frontend' : 'java';}
+function anchor(index) {return data[side].trace[index];}
+function fileFor(index) {return tiles[owner(index)].get(anchor(index).path);}
+function make(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+function groupKey(repo, path) {
+  if (repo === 'frontend') return path === 'server.mjs' ? 'Node proxy' :
+    /^(src|public)\//.test(path) ? 'Browser' : 'Repository files';
+  const module = path.split('/')[0];
+  if (!path.includes('/')) return 'Repository and shared files';
+  const service = javaServices.find(name => module === name || module.startsWith(name + '-'));
+  if (service) return service;
+  if (/^ftgo-.*test/.test(module)) return 'Tests and fixtures';
+  return 'Repository and shared files';
+}
+function label(group) {
+  if (group === 'ftgo-api-gateway') return 'API gateway';
+  return group.replace(/^ftgo-/,'').split('-').map(word => word[0].toUpperCase() + word.slice(1)).join(' ');
+}
+function sourceLink(repo, path, revision, line) {
+  return 'https://github.com/' + repos[repo] + '/blob/' + revision + '/' +
+    path.split('/').map(encodeURIComponent).join('/') + (line ? '#L' + line : '');
+}
+function addTileKeys(board) {
+  board.addEventListener('keydown', event => {
+    if (!event.target.matches('.tile')) return;
+    const nodes = [...board.children], index = nodes.indexOf(event.target);
+    const columns = getComputedStyle(board).gridTemplateColumns.split(' ').length;
+    const delta = {ArrowLeft:-1,ArrowRight:1,ArrowUp:-columns,ArrowDown:columns}[event.key];
+    if (delta === undefined) return;
+    event.preventDefault();
+    const target = nodes[Math.max(0,Math.min(nodes.length-1,index+delta))];
+    event.target.tabIndex = -1;
+    target.tabIndex = 0;
+    target.focus();
+  });
+}
+function inventory(repo, paths) {
+  const groups = new Map();
+  const first = repo === 'frontend' ? ['Browser','Node proxy'] : ['ftgo-api-gateway','ftgo-order-service'];
+  const route = [...new Set(data[side].trace.filter((_,i) => owner(i) === repo).map(item => item.path))];
+  for (const path of paths) {
+    const group = groupKey(repo,path);
+    if (!groups.has(group)) groups.set(group,[]);
+    groups.get(group).push(path);
+  }
+  const rank = key => first.includes(key) ? first.indexOf(key) : first.length;
+  const fragment = document.createDocumentFragment();
+  tiles[repo].clear();
+  for (const [group,files] of [...groups].sort(([a],[b]) => rank(a)-rank(b) || a.localeCompare(b))) {
+    const card = make('section',undefined,'region' + (first.includes(group) ? ' primary' : ''));
+    const header = make('div',undefined,'region-title');
+    header.append(make('h3',label(group)),make('span',String(files.length)));
+    const board = make('div',undefined,'tiles');
+    const position = path => route.includes(path) ? route.indexOf(path) : route.length;
+    const ordered = [...files].sort((a,b) => position(a)-position(b) || a.localeCompare(b));
+    for (const [index,path] of ordered.entries()) {
+      const tile = make('button',undefined,'tile');
+      tile.type = 'button';
+      tile.tabIndex = index ? -1 : 0;
+      tile.title = path;
+      tile.setAttribute('aria-label',path);
+      tile.setAttribute('aria-pressed','false');
+      tile.classList.toggle('route',route.includes(path));
+      tile.classList.toggle('edited',repo === 'frontend' && side === 'head' && data.changed_files.includes(path));
+      tile.addEventListener('click',() => {
+        stop(); selection = {repo,path}; renderDetails();
+      });
+      tiles[repo].set(path,tile);
+      board.append(tile);
+    }
+    addTileKeys(board);
+    card.append(header,board);
+    fragment.append(card);
+  }
+  el(repo + '-regions').replaceChildren(fragment);
+}
+function readout() {
+  const result = row(), browser = result.browserRequests[0];
+  const gateway = result.gatewayRequests[0];
+  const id = gateway?.path.split('/').at(-1);
+  return [
+    'Input order ' + result.input,
+    browser.method + ' ' + browser.path,
+    gateway ? gateway.method + ' ' + gateway.path : 'No request reached the gateway',
+    result.route_matched ? 'GET /orders/{orderId}' : 'Route unreached',
+    result.route_matched ? 'orderId = ' + id : 'Path variable unreached',
+    result.route_matched ? 'GET /orders/' + id : 'Order service unreached',
+    result.route_matched ? 'long orderId = ' + id : 'Controller unreached',
+    result.repository_id ? 'findById(' + result.repository_id + ')' : 'Repository unreached'
+  ];
+}
+function renderDetails() {
+  const active = position >= 0 ? fileFor(position) : null;
+  for (const [repo,files] of Object.entries(tiles)) for (const [path,tile] of files) {
+    tile.classList.toggle('active',tile === active);
+    tile.setAttribute('aria-pressed',String(selection?.repo === repo && selection?.path === path));
+  }
+  el('progress').textContent = position < 0 ? names.length + ' steps' : (position + 1) + ' / ' + names.length;
+  el('step-title').textContent = position >= 0 ? names[position] : 'Order lookup trace';
+  el('step-detail').textContent = position >= 0 ? readout()[position] :
+    'Play the trace or select a file tile to inspect its source.';
+  const choice = selection || (position >= 0 ? {repo:owner(position),path:anchor(position).path} : null);
+  el('selected-name').textContent = choice ? choice.path.split('/').at(-1) : 'Source';
+  el('selected-path').textContent = choice ? repos[choice.repo] + ' / ' + choice.path : 'Choose a file tile.';
+  const links = el('source-links');
+  links.replaceChildren();
+  if (!choice) return;
+  const revision = choice.repo === 'frontend' ? data[side].revision : data.java_revision;
+  const matches = data[side].trace.flatMap((item,index) =>
+    owner(index) === choice.repo && item.path === choice.path ? [[item.line,names[index]]] : []);
+  for (const [line,text] of matches.length ? matches : [[null,'Open file']]) {
+    const link = make('a',line ? text + ' · L' + line : text);
+    link.href = sourceLink(choice.repo,choice.path,revision,line);
+    links.append(link);
+  }
+}
+function draw() {
+  const map = el('map').getBoundingClientRect(), narrow = matchMedia('(max-width:850px)').matches;
+  const group = el('edges');
+  group.replaceChildren();
+  for (const [from,to] of edges) {
+    const left = fileFor(from)?.getBoundingClientRect(), right = fileFor(to)?.getBoundingClientRect();
+    if (!left || !right) continue;
+    const cross = from === 2, vertical = narrow && cross;
+    const rightward = left.x < right.x;
+    const x1 = (vertical ? left.x + left.width/2 : rightward ? left.right : left.left) - map.x;
+    const y1 = (vertical ? left.bottom : left.y + left.height/2) - map.y;
+    const x2 = (vertical ? right.x + right.width/2 : rightward ? right.left : right.right) - map.x;
+    const y2 = (vertical ? right.top : right.y + right.height/2) - map.y;
+    const mid = vertical ? (y1+y2)/2 : (x1+x2)/2;
+    const lane = !cross && Math.abs(x2-x1) > 48 ? Math.min(y1,y2)-12 : null;
+    const points = vertical ? [x1,mid,x2,mid,x2,y2] : lane === null ?
+      [mid,y1,mid,y2,x2,y2] : [x1,lane,x2,lane,x2,y2];
+    const path = document.createElementNS(el('arrows').namespaceURI,'path');
+    path.setAttribute('d','M ' + x1 + ' ' + y1 + ' C ' + points.join(' '));
+    const current = position === to;
+    path.setAttribute('class',['edge',cross?'cross':'',current?'current':'',position>to?'past':'',
+      to >= 3 && !row().route_matched?'unreached':''].join(' '));
+    path.setAttribute('marker-end','url(#' + (current?'arrow-active':'arrow') + ')');
+    group.append(path);
+    if (cross) {
+      const label = el('bridge-label');
+      label.style.top = ((y1+y2)/2 - label.parentElement.offsetTop) + 'px';
+      const observed = row().gatewayRequests[0];
+      label.textContent = observed ? observed.method + ' ' + observed.path : 'No upstream request';
+      label.classList.toggle('changed',row().repository_id !== row('base').repository_id);
+      label.classList.toggle('active',current);
+    }
+  }
+}
+function show() {
+  const result = row(), base = row('base');
+  el('outcome').textContent = side === 'head' && result.repository_id !== base.repository_id ?
+    'Input ' + result.input + ' · Java lookup ' + (base.repository_id ?? 'unreached') +
+      ' → ' + (result.repository_id ?? 'unreached') :
+    'Input ' + result.input + ' · Java ' + (result.repository_id ? 'findById(' + result.repository_id + ')' : 'lookup unreached');
+  el('outcome').classList.toggle('changed',result.repository_id !== base.repository_id);
+  el('java-pin').textContent = 'OrderController.java · ' +
+    (result.repository_id ? 'findById(' + result.repository_id + ')' : 'unreached');
+  el('frontend-pin').classList.toggle('changed',side === 'head' && data.changed_files.includes(anchor(1).path));
+  renderDetails(); draw();
+}
+function setVersion(version) {
+  stop(); side = version; position = -1; selection = null;
+  el('base').setAttribute('aria-pressed',String(side === 'base'));
+  el('head').setAttribute('aria-pressed',String(side === 'head'));
+  el('frontend-revision').textContent = (side === 'head' ? 'PR head' : 'PR base') + ' · ' +
+    data[side].revision.slice(0,12) + ' · ' + data.frontend_files[side].length + ' files' +
+    (side === 'head' ? ' · ' + data.changed_files.length + ' PR edits' : '');
+  el('java-revision').textContent = 'Governed Java source · ' + data.java_revision.slice(0,12) +
+    ' · ' + data.java_files.length + ' files · fixed for comparison';
+  inventory('frontend',data.frontend_files[side]);
+  inventory('java',data.java_files);
+  show();
+}
+function stop() {
+  if (timer !== null) clearInterval(timer);
+  timer = null; el('play').textContent = 'Play';
+}
+function step(delta) {
+  position = Math.max(-1,Math.min(names.length-1,position + delta));
+  selection = null; show();
+}
+el('base').onclick = () => setVersion('base');
+el('head').onclick = () => setVersion('head');
+el('frontend-pin').onclick = () => {stop(); position = 1; selection = null; show();};
+el('java-pin').onclick = () => {stop(); position = 7; selection = null; show();};
+el('back').onclick = () => {stop(); step(-1);};
+el('next').onclick = () => {stop(); step(1);};
+el('play').onclick = () => {
+  if (timer !== null) {stop(); return;}
+  if (position >= names.length-1) position = -1;
+  step(1); el('play').textContent = 'Pause';
+  timer = setInterval(() => position === names.length-1 ? stop() : step(1),850);
+};
+order.onchange = () => {stop(); position = -1; selection = null; show();};
+el('pins').textContent = 'Frontend package ' + data.frontend_package + ' · Java package ' +
+  data.java_package + ' · Java order query requirement ' + data.java_requirement;
+new ResizeObserver(draw).observe(el('map'));
+setVersion('head');
+</script>
+</body>
+</html>

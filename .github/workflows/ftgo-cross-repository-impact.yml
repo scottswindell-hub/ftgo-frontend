@@ -1,0 +1,72 @@
+name: FTGO cross-repository impact
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Frontend pull request number to replay
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  order-lookup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: srswinde/ftgo-application
+          ref: 15af39749a93d9a9cd24942321bed789f28b93ab
+          fetch-depth: 0
+          path: ftgo-java
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Select exact frontend PR commits
+        id: revisions
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ inputs.pull_request }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PR" ]; then
+            [[ "$PR" =~ ^[1-9][0-9]*$ ]]
+            pair="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '[.base.sha, .head.sha] | @tsv')"
+            read -r BASE HEAD <<< "$pair"
+            git -c credential.helper='!gh auth git-credential' fetch --quiet origin "$BASE" "refs/pull/$PR/head"
+          fi
+          [[ "$BASE" =~ ^[0-9a-f]{40}$ && "$HEAD" =~ ^[0-9a-f]{40}$ ]]
+          git cat-file -e "$BASE^{commit}"
+          git cat-file -e "$HEAD^{commit}"
+          printf 'base=%s\nhead=%s\n' "$BASE" "$HEAD" >> "$GITHUB_OUTPUT"
+      - name: Compare frontend order flow with the governed Java lookup
+        env:
+          BASE: ${{ steps.revisions.outputs.base }}
+          HEAD: ${{ steps.revisions.outputs.head }}
+        run: |
+          set -euo pipefail
+          python3 .github/holonic/compare.py --base "$BASE" --head "$HEAD" \
+            --java-repo ftgo-java --java-tool ftgo-java/.github/holonic/order_lookup_evidence.py \
+            --output ftgo-impact | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ftgo-cross-repository-impact
+          path: ftgo-impact/
+          if-no-files-found: error
